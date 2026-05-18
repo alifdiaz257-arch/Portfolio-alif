@@ -1,1 +1,1 @@
-![Hacker Glitch Face](https://giphy.com/search/black-lagoon.gif)
+![Hacker Glitch](https://giphy.com/search/black-lagoon)
